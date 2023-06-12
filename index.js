@@ -50,7 +50,6 @@ async function run() {
 
     const usersCollection = client.db("summerCampDB").collection("users");
     const classCollection = client.db("summerCampDB").collection("class");
-    const reviewCollection = client.db("summerCampDB").collection("reviews");
     const studentCollection = client.db("summerCampDB").collection("studentmyclass");
     const paymentCollection = client.db("summerCampDB").collection("payments");
 
@@ -228,7 +227,21 @@ async function run() {
       res.send(result);
     })
 
-    
+    app.put('/class/:id', async (req, res) => {
+      const id = req.params.id;
+      const filter = { _id: new ObjectId(id) };
+      const options = { upsert: true };
+      const updatedClass = req.body;
+      const classed = {
+        $set: {
+          sportsName: updatedClass.sportsName,
+          totalSeats: updatedClass.totalSeats,
+          price: updatedClass.price,
+        },
+      };
+      const result = await classCollection.updateOne(filter, classed, options);
+      res.send(result);
+    })
 
     app.get('/instructoclass', verifyJWT, async (req, res) => {
       const email = req.query.email;
@@ -303,11 +316,6 @@ async function run() {
 
     })
 
-    // review apis
-    app.get('/reviews', async (req, res) => {
-      const result = await reviewCollection.find().toArray();
-      res.send(result);
-    })
 
     // student class api
     app.get('/studentallclass', verifyJWT, async (req, res) => {
