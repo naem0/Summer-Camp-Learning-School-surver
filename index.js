@@ -129,9 +129,7 @@ async function run() {
     app.get('/users/instructo/:email', verifyJWT, async (req, res) => {
       const email = req.params.email;
 
-      if (req.decoded.email !== email) {
-        return res.send({ instructo: false })
-      }
+      
 
       const query = { email: email }
       const user = await usersCollection.findOne(query);
