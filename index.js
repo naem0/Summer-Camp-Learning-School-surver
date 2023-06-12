@@ -154,7 +154,19 @@ async function run() {
       res.send(result);
 
     })
-    
+    app.patch('/users/instructor/:id', async (req, res) => {
+      const id = req.params.id;
+      console.log(id);
+      const filter = { _id: new ObjectId(id) };
+      const updateDoc = {
+        $set: {
+          role: 'instructor',
+          class: 0
+        },
+      };
+      const result = await usersCollection.updateOne(filter, updateDoc);
+      res.send(result);
+    })
 
     app.delete('/user/:id', async (req, res) => {
       try {
@@ -190,10 +202,7 @@ async function run() {
       const result = await classCollection.find(query, options).limit(6).toArray();
       res.send(result);
     })
-    app.get('/allclass', async (req, res) => {
-      const result = await classCollection.find().toArray();
-      res.send(result);
-    })
+    
 
     app.post('/class', verifyJWT, verifyInstructo, async (req, res) => {
       const newItem = req.body;
