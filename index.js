@@ -185,7 +185,14 @@ async function run() {
     });
 
     // class apis
-    
+    app.get('/class', async (req, res) => {
+      const query = { status: "approved" };
+      const options = {
+        sort: { "bookSeats": -1 }
+      };
+      const result = await classCollection.find(query, options).toArray();
+      res.send(result);
+    })
     app.get('/topclass', async (req, res) => {
       const query = { status: "approved" }
       const options = {
