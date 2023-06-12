@@ -82,7 +82,10 @@ async function run() {
     }
 
     // users apis
-    
+    app.get('/users', async (req, res) => {
+      const result = await usersCollection.find().toArray();
+      res.send(result);
+    });
 
     app.post('/users', async (req, res) => {
       const user = req.body;
@@ -97,11 +100,7 @@ async function run() {
       res.send(result);
     });
 
-    app.get('/instructor', async (req, res) => {
-      const query = { role: "instructor" }
-      const options = {
-        sort: { "class": -1 }
-      }
+    
       const result = await usersCollection.find(query, options).toArray();
       res.send(result);
     })
