@@ -46,17 +46,17 @@ const client = new MongoClient(uri, {
 async function run() {
   try {
     // Connect the client to the server	(optional starting in v4.7)
-    await client.connect();
+    // await client.connect();
 
     const usersCollection = client.db("summerCampDB").collection("users");
     const classCollection = client.db("summerCampDB").collection("class");
     const reviewCollection = client.db("summerCampDB").collection("reviews");
-    const cartCollection = client.db("summerCampDB").collection("carts");
+    const studentCollection = client.db("summerCampDB").collection("studentmyclass");
     const paymentCollection = client.db("summerCampDB").collection("payments");
 
     app.post('/jwt', (req, res) => {
       const user = req.body;
-      const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, { expiresIn: '1h' })
+      const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, { expiresIn: '23h' })
 
       res.send({ token })
     })
@@ -71,12 +71,18 @@ async function run() {
       }
       next();
     }
+    const verifyInstructo = async (req, res, next) => {
+      const email = req.decoded.email;
+      const query = { email: email }
+      const user = await usersCollection.findOne(query);
+      if (user?.role !== 'instructor') {
+        return res.status(403).send({ error: true, message: 'forbidden message' });
+      }
+      next();
+    }
 
     // users apis
-    app.get('/users', verifyJWT, verifyAdmin, async (req, res) => {
-      const result = await usersCollection.find().toArray();
-      res.send(result);
-    });
+    
 
     app.post('/users', async (req, res) => {
       const user = req.body;
@@ -91,19 +97,43 @@ async function run() {
       res.send(result);
     });
 
-    // security layer: verifyJWT
-    // email same
-    // check admin
+    app.get('/instructor', async (req, res) => {
+      const query = { role: "instructor" }
+      const options = {
+        sort: { "class": -1 }
+      }
+      const result = await usersCollection.find(query, options).toArray();
+      res.send(result);
+    })
+    app.get('/topinstructo', async (req, res) => {
+      const query = { role: "instructor" }
+      const result = await usersCollection.find(query).limit(6).toArray();
+      res.send(result);
+    })
+
     app.get('/users/admin/:email', verifyJWT, async (req, res) => {
       const email = req.params.email;
+      console.log(email)
 
       if (req.decoded.email !== email) {
-        res.send({ admin: false })
+        return res.send({ admin: false })
       }
 
       const query = { email: email }
       const user = await usersCollection.findOne(query);
       const result = { admin: user?.role === 'admin' }
+      res.send(result);
+    })
+    app.get('/users/instructo/:email', verifyJWT, async (req, res) => {
+      const email = req.params.email;
+
+      if (req.decoded.email !== email) {
+        return res.send({ instructo: false })
+      }
+
+      const query = { email: email }
+      const user = await usersCollection.findOne(query);
+      const result = { instructo: user?.role === 'instructor' }
       res.send(result);
     })
 
@@ -121,25 +151,167 @@ async function run() {
       res.send(result);
 
     })
+    app.patch('/users/instructor/:id', async (req, res) => {
+      const id = req.params.id;
+      console.log(id);
+      const filter = { _id: new ObjectId(id) };
+      const updateDoc = {
+        $set: {
+          role: 'instructor',
+          class: 0
+        },
+      };
+      const result = await usersCollection.updateOne(filter, updateDoc);
+      res.send(result);
+    })
 
+    app.delete('/user/:id', async (req, res) => {
+      try {
+        const id = req.params.id;
+        const filter = { _id: new ObjectId(id) };
+        const result = await usersCollection.deleteOne(filter);
+
+        if (result.deletedCount === 1) {
+          res.status(200).json({ message: 'User deleted successfully' });
+        } else {
+          res.status(404).json({ message: 'User not found' });
+        }
+      } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: 'Internal server error' });
+      }
+    });
 
     // class apis
     app.get('/class', async (req, res) => {
+      const query = { status: "approved" };
+      const options = {
+        sort: { "bookSeats": -1 }
+      };
+      const result = await classCollection.find(query, options).toArray();
+      res.send(result);
+    })
+    app.get('/topclass', async (req, res) => {
+      const query = { status: "approved" }
+      const options = {
+        sort: { "bookSeats": -1 }
+      }
+      const result = await classCollection.find(query, options).limit(6).toArray();
+      res.send(result);
+    })
+    app.get('/allclass', async (req, res) => {
       const result = await classCollection.find().toArray();
       res.send(result);
     })
 
-    app.post('/class', verifyJWT, verifyAdmin, async (req, res) => {
+    app.post('/class', verifyJWT, verifyInstructo, async (req, res) => {
       const newItem = req.body;
       const result = await classCollection.insertOne(newItem)
       res.send(result);
     })
 
-    app.delete('/class/:id', verifyJWT, verifyAdmin, async (req, res) => {
+    app.delete('/class/:id', verifyJWT, verifyInstructo, async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) }
       const result = await classCollection.deleteOne(query);
       res.send(result);
+    })
+    app.get('/class/:id', async (req, res) => {
+      const id = req.params.id;
+      console.log(id)
+      const query = { _id: new ObjectId(id) }
+      const result = await studentCollection.findOne(query);
+      console.log(result)
+      res.send(result);
+    })
+
+    app.put('/class/:id', async (req, res) => {
+      const id = req.params.id;
+      const filter = { _id: new ObjectId(id) };
+      const options = { upsert: true };
+      const updatedClass = req.body;
+      const classed = {
+        $set: {
+          sportsName: updatedClass.sportsName,
+          totalSeats: updatedClass.totalSeats,
+          price: updatedClass.price,
+        },
+      };
+      const result = await classCollection.updateOne(filter, classed, options);
+      res.send(result);
+    })
+
+    app.get('/instructoclass', verifyJWT, async (req, res) => {
+      const email = req.query.email;
+
+      const decodedEmail = req.decoded.email;
+      if (email !== decodedEmail) {
+        return res.status(403).send({ error: true, message: 'forbidden access' })
+      }
+
+      const query = { instructorEmail: email };
+      const result = await classCollection.find(query).toArray();
+      res.send(result);
+    });
+
+    app.patch('/class/approved/:id', async (req, res) => {
+      const id = req.params.id;
+      console.log(id);
+      const filter = { _id: new ObjectId(id) };
+      const updateDoc = {
+        $set: {
+          status: 'approved'
+        },
+      };
+
+      const classData = await classCollection.findOne({ _id: new ObjectId(id) });
+      const instructorEmail = classData.instructorEmail;
+
+      const userFilter = { email: instructorEmail };
+      const userData = await usersCollection.findOne(userFilter);
+      const previousClassValue = userData.class;
+      const newClassValue = previousClassValue + 1;
+
+      const userUpdateDoc = {
+        $set: {
+          class: newClassValue
+        },
+      };
+
+      const userResult = await usersCollection.updateOne(userFilter, userUpdateDoc);
+
+      const result = await classCollection.updateOne(filter, updateDoc);
+      res.send({ result, userResult });
+    })
+    app.patch('/class/deny/:id', async (req, res) => {
+      const id = req.params.id;
+      console.log(id);
+      const filter = { _id: new ObjectId(id) };
+      const updateDoc = {
+        $set: {
+          status: 'deny'
+        },
+      };
+
+      const result = await classCollection.updateOne(filter, updateDoc);
+      res.send(result);
+
+    })
+    app.patch('/class/feedback/:id', async (req, res) => {
+      const id = req.params.id;
+      const feedback = req.body.feedback;
+      console.log(feedback)
+      console.log(id);
+      const filter = { _id: new ObjectId(id) };
+      const updateDoc = {
+        $set: {
+          feedback: feedback
+        },
+      };
+
+      const result = await classCollection.updateOne(filter, updateDoc);
+      res.send(result);
+
     })
 
     // review apis
@@ -148,13 +320,12 @@ async function run() {
       res.send(result);
     })
 
-
-    // cart apis
-    app.get('/carts', verifyJWT, async (req, res) => {
+    // student class api
+    app.get('/studentallclass', verifyJWT, async (req, res) => {
       const email = req.query.email;
 
       if (!email) {
-        res.send([]);
+        return res.send([]);
       }
 
       const decodedEmail = req.decoded.email;
@@ -163,20 +334,20 @@ async function run() {
       }
 
       const query = { email: email };
-      const result = await cartCollection.find(query).toArray();
+      const result = await studentCollection.find(query).toArray();
       res.send(result);
     });
 
-    app.post('/carts', async (req, res) => {
+    app.post('/studentallclass', async (req, res) => {
       const item = req.body;
-      const result = await cartCollection.insertOne(item);
+      const result = await studentCollection.insertOne(item);
       res.send(result);
     })
 
     app.delete('/carts/:id', async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
-      const result = await cartCollection.deleteOne(query);
+      const result = await studentCollection.deleteOne(query);
       res.send(result);
     })
 
@@ -199,13 +370,32 @@ async function run() {
     // payment api
     app.post('/payments', verifyJWT, async (req, res) => {
       const payment = req.body;
-      const insertResult = await paymentCollection.insertOne(payment);
+      const id = payment.studentclassItems;
+      const query = { _id : new ObjectId(id) }
+      const deleteResult = await studentCollection.deleteOne(query)
 
-      const query = { _id: { $in: payment.cartItems.map(id => new ObjectId(id)) } }
-      const deleteResult = await cartCollection.deleteMany(query)
+      const insertResult = await paymentCollection.insertOne(payment);
+      await classCollection.updateOne({}, { $inc: { bookSeats: 1 } });
 
       res.send({ insertResult, deleteResult });
     })
+
+    app.get('/mypayments', verifyJWT, async (req, res) => {
+      const email = req.query.email;
+
+      if (!email) {
+        return res.send([]);
+      }
+
+      const decodedEmail = req.decoded.email;
+      if (email !== decodedEmail) {
+        return res.status(403).send({ error: true, message: 'forbidden access' })
+      }
+
+      const query = { email: email };
+      const result = await paymentCollection.find(query).sort({ date: -1 }).toArray();
+      res.send(result);
+    });
 
     app.get('/admin-stats', verifyJWT, verifyAdmin, async (req, res) => {
       const users = await usersCollection.estimatedDocumentCount();
@@ -214,7 +404,7 @@ async function run() {
 
 
       const payments = await paymentCollection.find().toArray();
-      const revenue = payments.reduce( ( sum, payment) => sum + payment.price, 0)
+      const revenue = payments.reduce((sum, payment) => sum + payment.price, 0)
 
       res.send({
         revenue,
@@ -224,21 +414,7 @@ async function run() {
       })
     })
 
-
-    /**
-     * ---------------
-     * BANGLA SYSTEM(second best solution)
-     * ---------------
-     * 1. load all payments
-     * 2. for each payment, get the classItems array
-     * 3. for each item in the classItems array get the classItem from the class collection
-     * 4. put them in an array: allOrderedItems
-     * 5. separate allOrderedItems by category using filter
-     * 6. now get the quantity by using length: pizzas.length
-     * 7. for each category use reduce to get the total amount spent on this category
-     * 
-    */
-    app.get('/order-stats', verifyJWT, verifyAdmin, async(req, res) =>{
+    app.get('/order-stats', verifyJWT, async (req, res) => {
       const pipeline = [
         {
           $lookup: {
@@ -267,10 +443,8 @@ async function run() {
           }
         }
       ];
-
       const result = await paymentCollection.aggregate(pipeline).toArray()
       res.send(result)
-
     })
 
 
@@ -283,7 +457,6 @@ async function run() {
   }
 }
 run().catch(console.dir);
-
 
 app.get('/', (req, res) => {
   res.send('hello summer school')
